@@ -105,7 +105,7 @@ for(col in names(housesales_train)[categorical_cols]) {
     
     housesales_train[[col]] <- relevel(housesales_train[[col]], ref = levels(housesales_train[[col]])[1])
     
-    
+   
   }  else {
     
     housesales_train[[col]] <- relevel(housesales_train[[col]], ref = levels(housesales_train[[col]])[1])
@@ -147,7 +147,7 @@ columns_to_remove <- c("exterqual", "extercond", "bsmtqual", "bsmtcond", "bsmtex
 
 # Remove the specified columns
 housesales_train <- housesales_train[, -which(names(housesales_train) %in% columns_to_remove)]
-
+colnames(housesales_train)
 #--------------------------------------------------------------------------------------------------------------
 #3. Feature Engineering
 #--------------------------------------------------------------------------------------------------------------
@@ -164,7 +164,7 @@ housesales_train$age <- housesales_train$yrsold - housesales_train$yearbuilt
 
 # Total porch sqft
 housesales_train$totalporchsqft <- housesales_train$openporchsf + housesales_train$enclosedporch + 
-  housesales_train$x3ssnporch + housesales_train$screenporch
+                                   housesales_train$x3ssnporch + housesales_train$screenporch
 
 # Total parking size 
 housesales_train$totalparkingsize <- housesales_train$garagearea+ housesales_train$wooddecksf
@@ -187,14 +187,37 @@ View(housesales_train)
 #-------------------
 
 library(randomForest)
-# Identifying columns with >53 levels
-many_levels <- sapply(housesales_train, function(x) length(levels(x))) > 53
-# Remove those columns
+# # Identifying columns with >53 levels
+# many_levels <- sapply(housesales_train, function(x) length(levels(x))) > 53
+# # Remove those columns
+# housesales_train <- housesales_train[, !many_levels]
+
+# Identify columns with many levels
+many_levels <- sapply(housesales_train, function(x) length(levels(x))) > 53 
+
+# Target encoding function
+target_encode <- function(data, target, column) {
+  means <- data %>% 
+    group_by(!!rlang::sym(column)) %>%
+    summarise(mean_target = mean(!!rlang::sym(target)))
+  data %>%
+    left_join(means, by = column) %>%
+    mutate(!!column := mean_target) %>%
+    select(-mean_target)
+}
+library(dplyr)
+# Apply encoding to training data
+for(col in names(housesales_train)[many_levels]) {
+  housesales_train <- target_encode(housesales_train, "saleprice", col) 
+}
+
+# Remove original columns
 housesales_train <- housesales_train[, !many_levels]
+
 # Now fit model
 rf_model <- randomForest(saleprice ~ ., data = housesales_train, importance = TRUE)
 print(importance(rf_model))
-
+colnames(housesales_train)
 #--------------------------------------------------------------------------------------------------------------
 #4. Model Building
 #--------------------------------------------------------------------------------------------------------------
@@ -216,7 +239,7 @@ baseline_rmse <- rmse(baseline_predictions, train_data$saleprice)
 print(baseline_rmse)
 
 features_lm <- c('grlivarea', 'totalsqft', 'neighborhood', 'overallqual', 
-                 'garagecars', 'totalbaths', 'age', 'enclosedporch')
+              'garagecars', 'totalbaths', 'age', 'enclosedporch')
 
 
 # MODEL 1: Simple linear regression model
@@ -335,12 +358,12 @@ baseline_rmse_no_outliers <- rmse(baseline_predictions_no_outliers, train_data_n
 print(baseline_rmse_no_outliers)
 
 features_lm_no_outliers <- c('grlivarea', 'totalsqft', 'neighborhood', 'overallqual', 
-                             'garagecars', 'totalbaths', 'age', 'enclosedporch')
+                 'garagecars', 'totalbaths', 'age', 'enclosedporch')
 
 
 # MODEL 1(a): Simple linear regression model(No outliers)
 lm_model_no_outliers <- lm(saleprice ~ grlivarea + totalsqft + neighborhood + overallqual + garagecars + 
-                             totalbaths + age + enclosedporch, data = train_data_no_outliers)
+                 totalbaths + age + enclosedporch, data = train_data_no_outliers)
 
 # Summary of the Simple linear regression model(No outliers)
 summary(lm_model_no_outliers)
@@ -356,16 +379,16 @@ cat("Linear Model RMSE(No outliers):", rmse_lm_no_outliers, "\n")
 
 # MODEL 2(a): Simple Random Forest model(No outliers)
 features_rf_no_outliers <- c("neighborhood","overallqual","overallcond","grlivarea", 
-                             "totalsqft", "totalbaths", "garagecars", "age")
+                 "totalsqft", "totalbaths", "garagecars", "age")
 # Fit model
 library(randomForest)
 rf_model_no_outliers <- randomForest(saleprice ~ grlivarea*age + totalsqft*garagecars +
-                                       
+                         
                                        neighborhood + overallqual + overallcond +  
-                                       totalbaths,
-                                     data = train_data_no_outliers,
-                                     ntree=500,
-                                     importance = TRUE)
+                         totalbaths,
+                         data = train_data_no_outliers,
+                         ntree=500,
+                         importance = TRUE)
 # Summary of the random forest model (No outliers)
 summary(rf_model_no_outliers)
 library(Metrics)
@@ -397,10 +420,30 @@ sapply(housesales_test, function(x) sum(is.na(x)))
 housesales_test$lotfrontage[is.na(housesales_test$lotfrontage)] <- median(housesales_test$lotfrontage, na.rm = TRUE)
 #Imputing with 0, indicating no masonry veneer.
 housesales_test$masvnrarea[is.na(housesales_test$masvnrarea)] <- 0
+#Imputing with 0
+housesales_test$bsmtfinsf1[is.na(housesales_test$bsmtfinsf1)] <- 0
+housesales_test$bsmtfinsf2[is.na(housesales_test$bsmtfinsf2)] <- 0
+housesales_test$bsmtunfsf[is.na(housesales_test$bsmtunfsf)] <- 0
+housesales_test$totalbsmtsf[is.na(housesales_test$totalbsmtsf)] <- 0
+housesales_test$bsmtfullbath[is.na(housesales_test$bsmtfullbath)] <- 0
+housesales_test$bsmthalfbath[is.na(housesales_test$bsmthalfbath)] <- 0
+housesales_test$garagecars[is.na(housesales_test$garagecars)] <- 0
+housesales_test$garagearea[is.na(housesales_test$garagearea)] <- median(housesales_test$garagearea, na.rm = TRUE)
 
 #Imputing categorical missing values
-housesales_test$alley[is.na(housesales_test$alley)] <- "None"
+mode_value <- as.character(mlv(housesales_test$mszoning))
+housesales_test$mszoning[is.na(housesales_test$mszoning)] <- mode_value
+mode_value <- as.character(mlv(housesales_test$kitchenqual))
+housesales_test$kitchenqual[is.na(housesales_test$kitchenqual)] <- mode_value
+mode_value <- as.character(mlv(housesales_test$functional))
+housesales_test$functional[is.na(housesales_test$functional)] <- mode_value
+mode_value <- as.character(mlv(housesales_test$saletype))
+housesales_test$saletype[is.na(housesales_test$saletype)] <- mode_value
 
+housesales_test$alley[is.na(housesales_test$alley)] <- "None"
+housesales_test$utilities[is.na(housesales_test$utilities)] <- "None"
+housesales_test$exterior1st[is.na(housesales_test$exterior1st)] <- "None"
+housesales_test$exterior2nd[is.na(housesales_test$exterior2nd)] <- "None"
 housesales_test$masvnrtype[is.na(housesales_test$masvnrtype)] <- "None"
 
 housesales_test$bsmtqual[is.na(housesales_test$bsmtqual)] <- "None"
@@ -502,7 +545,7 @@ housesales_test$totalbaths <- housesales_test$fullbath + 0.5*(housesales_test$ha
 housesales_test$age <- housesales_test$yrsold - housesales_test$yearbuilt 
 # Total porch sqft
 housesales_test$totalporchsqft <- housesales_test$openporchsf + housesales_test$enclosedporch + 
-  housesales_test$x3ssnporch + housesales_test$screenporch
+housesales_test$x3ssnporch + housesales_test$screenporch
 # Total parking size 
 housesales_test$totalparkingsize <- housesales_test$garagearea+ housesales_test$wooddecksf
 # Has 2nd floor 
@@ -511,6 +554,30 @@ housesales_test$hassecondfloor <- ifelse(housesales_test$x2ndflrsf > 0, 1, 0)
 housesales_test$lotsizesq <- housesales_test$lotfrontage * housesales_test$lotarea
 # New construction
 housesales_test$newconstruction <- ifelse(housesales_test$yearbuilt == housesales_test$yrsold, 1, 0)
+
+# Identify columns with many levels
+many_levels <- sapply(housesales_test, function(x) length(levels(x))) > 53 
+
+# Target encoding function
+target_encode <- function(data, target, column) {
+  means <- data %>% 
+    group_by(!!rlang::sym(column)) %>%
+    summarise(mean_target = mean(!!rlang::sym(target)))
+  data %>%
+    left_join(means, by = column) %>%
+    mutate(!!column := mean_target) %>%
+    select(-mean_target)
+}
+library(dplyr)
+# Apply encoding to training data
+for(col in names(housesales_test)[many_levels]) {
+  housesales_test <- target_encode(housesales_test, "saleprice", col) 
+}
+
+# Remove original columns
+housesales_test <- housesales_test[, !many_levels]
+
+
 # Write the cleaned data frame to a csv file after feature engineering
 write.csv(housesales_test, file = "feature_engineering_housesales_test_cleaned.csv", row.names = FALSE)
 View(housesales_test)
@@ -524,4 +591,118 @@ test_out <- data.frame(Id = test_id, SalePrice = test_preds)
 # Write CSV file 
 write.csv(test_out, file = "test_predictions.csv", row.names=FALSE)
 #--------------------------------------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------------------------------------- 
+ 
+# MODEL 3: XGBoost model
+# Load xgboost package
+library(xgboost)
+# Split training data into train and validation sets
+set.seed(123) 
+indice <- sample(1:nrow(housesales_train), 0.8*nrow(housesales_train))
+train_train_xgb <- housesales_train[indice,]
+train_val_xgb <- housesales_train[-indice,]
+
+# Identify character columns
+char_cols_xgb <- sapply(train_train_xgb, is.character)
+# Convert to numeric 
+train_train_xgb[,names(char_cols_xgb)] <- lapply(train_train_xgb[,names(char_cols_xgb)], as.numeric)
+
+# Convert training data to matrix
+train_mat_xgb <- model.matrix(saleprice ~., data = train_train_xgb)
+
+# Extract saleprice as label vector 
+train_label_xgb <- housesales_train$saleprice[indice]
+
+# Train model
+xgb_model <- xgboost(saleprice ~.,
+                     data = train_mat_xgb, 
+                     label = train_label_xgb,
+                     max_depth = 6, 
+                     nrounds = 500)
+
+xgb.importance(model = xgb_model)
+
+
+#Predict on validation data
+char_cols_xgb_valid <- sapply(train_val_xgb, is.character)
+# Convert to numeric 
+train_val_xgb[,names(char_cols_xgb_valid)] <- lapply(train_val_xgb[,names(char_cols_xgb_valid)], as.numeric)
+# Convert validation data to matrix 
+valid_mat_xgb <- model.matrix(saleprice ~., data = train_val_xgb)
+# Make predictions
+xgb_preds <- predict(xgb_model, valid_mat_xgb) 
+# Calculate RMSE
+xgb_rmse <- rmse(xgb_preds, train_val_xgb$saleprice)
+xgb_rmse
+
+# Compare to baseline and RF
+cat("Baseline RMSE:", baseline_rmse, "\n") 
+cat("Linear Model RMSE:", rmse_lm, "\n")
+cat("Random Forest RMSE:", rmse_rf, "\n")
+cat("XGBoost RMSE:", xgb_rmse, "\n")
+
+# Extract ID column from test data
+test_id_xgb <- housesales_test$id
+test_id_xgb
+char_cols_xgb_test <- sapply(housesales_test, is.character)
+# Convert to numeric 
+housesales_test[,names(char_cols_xgb_test)] <- lapply(housesales_test[,names(char_cols_xgb_test)], as.numeric)
+# Convert validation data to matrix 
+test_mat <- model.matrix( ~., data = housesales_test)
+# Make predictions
+xgb_preds_test <- predict(xgb_model, test_mat) 
+# Create dataframe with ID and predictions
+test_out_xgb <- data.frame(Id = test_id_xgb, SalePrice = xgb_preds_test)
+# Write CSV file 
+write.csv(test_out_xgb, file = "test_predictions_xgb_new.csv", row.names=FALSE)
+
+#--------------------------------------------------------------------------------------------------------------
+# MODEL 4: Gradient Boosting Regressor model
+# Load libraries
+library(caret)
+#install.packages("gbm")
+library(gbm)
+library(Metrics)
+
+# Split data
+set.seed(123) 
+indice <- sample(1:nrow(housesales_train), 0.8*nrow(housesales_train))
+train_train <- housesales_train[indice,]
+train_val <- housesales_train[-indice,]
+
+# Preprocess data
+char_cols <- sapply(train_train, is.character)
+train_train[,names(char_cols)] <- lapply(train_train[,names(char_cols)], as.numeric)
+
+# Train GB model 
+gb_model <- gbm(saleprice ~., 
+                data = train_train, 
+                distribution = "gaussian", 
+                n.trees = 500,
+                interaction.depth = 6)
+
+# Predict on validation data
+char_cols_valid <- sapply(train_val, is.character)
+train_val[,names(char_cols_valid)] <- lapply(train_val[,names(char_cols_valid)], as.numeric)
+gb_preds <- predict(gb_model, newdata = train_val, n.trees = 500)
+
+# Evaluate
+gb_rmse <- rmse(gb_preds, train_val$saleprice) 
+print(gb_rmse)
+
+# Compare to baseline and RF
+cat("Baseline RMSE:", baseline_rmse, "\n")  
+cat("Linear Model RMSE:", rmse_lm, "\n")
+cat("Random Forest RMSE:", rmse_rf, "\n")
+cat("XGBoost RMSE:", xgb_rmse, "\n")
+cat("Gradient Boosting Regressor RMSE:", gb_rmse, "\n")
+
+# Make test predictions
+char_cols_test <- sapply(housesales_test, is.character)
+housesales_test[,names(char_cols_test)] <- lapply(housesales_test[,names(char_cols_test)], as.numeric)
+
+gb_preds_test <- predict(gb_model, newdata = housesales_test, n.trees = 500)
+
+# Create submission file
+test_out_gb <- data.frame(Id = housesales_test$id, SalePrice = gb_preds_test)
+write.csv(test_out_gb, "test_predictions_gb.csv", row.names=FALSE)
+#--------------------------------------------------------------------------------------------------------------
